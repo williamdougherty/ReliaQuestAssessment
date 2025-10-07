@@ -22,27 +22,34 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
     private static final String MOCK_API_URL = "http://localhost:8112/api/v1/employee";
 
     @Autowired
-    private RestTemplate restTemplate;
+    private RestTemplate restApiTemplate;
 
     /**
      * Returns all employees by fetching from the mock API.
      */
     @Override
     public ResponseEntity<List<Employee>> getAllEmployees() {
-        EmployeeListResponse response = restTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
         List<Employee> employees = (response != null && response.getData() != null)
                 ? Arrays.asList(response.getData())
                 : List.of();
         return ResponseEntity.ok(employees);
     }
 
-
-    // The following methods are required by the interface but not yet implemented.
-    // They currently return stub responses.
-
+    /**
+     * Returns all employees whose name contains or matches the search string (case-insensitive).
+     */
     @Override
     public ResponseEntity<List<Employee>> getEmployeesByNameSearch(String searchString) {
-        return ResponseEntity.notFound().build();
+        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        if (response == null || response.getData() == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        String searchLower = searchString.toLowerCase();
+        List<Employee> filtered = Arrays.stream(response.getData())
+                .filter(emp -> emp.getEmployee_name() != null && emp.getEmployee_name().toLowerCase().contains(searchLower))
+                .toList();
+        return ResponseEntity.ok(filtered);
     }
 
     @Override

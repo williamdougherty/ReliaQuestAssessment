@@ -72,7 +72,16 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
 
     @Override
     public ResponseEntity<List<String>> getTopTenHighestEarningEmployeeNames() {
-        return ResponseEntity.ok(List.of());
+        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        if (response == null || response.getData() == null || response.getData().length == 0) {
+            return ResponseEntity.ok(List.of());
+        }
+        List<String> top10Names = Arrays.stream(response.getData())
+                .sorted((a, b) -> Integer.compare(b.getEmployee_salary(), a.getEmployee_salary()))
+                .limit(10)
+                .map(Employee::getEmployee_name)
+                .toList();
+        return ResponseEntity.ok(top10Names);
     }
 
     @Override

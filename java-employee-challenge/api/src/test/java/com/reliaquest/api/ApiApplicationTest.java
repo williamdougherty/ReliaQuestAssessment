@@ -14,12 +14,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ApiApplicationTest {
     /**
-     * Verifies that the /employees/highestSalary endpoint returns the correct highest salary among all employees.
-     * Checks HTTP status and that the value matches the max salary from the employee list.
+     * Verifies that the /employees/topTenHighestEarningEmployeeNames endpoint returns the correct top 10 employee names by salary.
+     * Checks HTTP status, correct number of results, and that the names match the top 10 salaries in order.
      */
     @Test
-    void shouldReturnHighestSalaryOfEmployees() {
-        // Fetch all employees to determine the expected highest salary
+    void shouldReturnTopTenHighestEarningEmployeeNames() {
+        // Fetch all employees to determine the expected top 10 by salary
         ResponseEntity<Employee[]> allResponse = restTemplate.getForEntity("/employees", Employee[].class);
         assertThat(allResponse.getStatusCode().is2xxSuccessful())
             .as("Expected a successful HTTP response for all employees")
@@ -33,7 +33,52 @@ class ApiApplicationTest {
             .as("All employees list should not be empty")
             .isGreaterThan(0);
 
-        int expectedMaxSalary = java.util.Arrays.stream(allEmployees)
+        // Sort employees by salary descending and get the top 10 names
+        List<String> expectedTop10Names = java.util.Arrays.stream(allEmployees)
+            .sorted((a, b) -> Integer.compare(b.getEmployee_salary(), a.getEmployee_salary()))
+            .limit(10)
+            .map(Employee::getEmployee_name)
+            .toList();
+
+        // Call the endpoint under test
+        ResponseEntity<String[]> response = restTemplate.getForEntity("/employees/topTenHighestEarningEmployeeNames", String[].class);
+        assertThat(response.getStatusCode().is2xxSuccessful())
+            .as("Expected a successful HTTP response for top 10 names")
+            .isTrue();
+
+        String[] actualTop10Names = response.getBody();
+        assertThat(actualTop10Names)
+            .as("Top 10 names response body should not be null")
+            .isNotNull();
+        assertThat(actualTop10Names.length)
+            .as("Should return at most 10 names")
+            .isLessThanOrEqualTo(10);
+        List<String> actualNames = java.util.Arrays.asList(actualTop10Names);
+        assertThat(actualNames)
+            .as("Top 10 names should match expected order and values")
+            .containsExactlyElementsOf(expectedTop10Names);
+    }
+    /**
+     * Verifies that the /employees/highestSalary endpoint returns the correct highest salary among all employees.
+     * Checks HTTP status and that the value matches the max salary from the employee list.
+     */
+    @Test
+    void shouldReturnHighstSalaryOfEmployees() {
+        // Fetch all employees to determine the expected highest salary
+        ResponseEntity<Employee[]> allResponse = restTemplate.getForEntity("/employees", Employee[].class);
+        assertThat(allResponse.getStatusCode().is2xxSuccessful())
+            .as("Expected a successful HTTP response for all employees")
+            .isTrue();
+
+        Employee[] employees = allResponse.getBody();
+        assertThat(employees)
+            .as("All employees response body should not be null")
+            .isNotNull();
+        assertThat(employees.length)
+            .as("All employees list should not be empty")
+            .isGreaterThan(0);
+
+        int expectedMaxSalary = java.util.Arrays.stream(employees)
             .mapToInt(Employee::getEmployee_salary)
             .max()
             .orElse(0);

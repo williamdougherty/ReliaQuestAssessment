@@ -59,7 +59,15 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
 
     @Override
     public ResponseEntity<Integer> getHighestSalaryOfEmployees() {
-        return ResponseEntity.ok(0);
+        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        if (response == null || response.getData() == null || response.getData().length == 0) {
+            return ResponseEntity.ok(0);
+        }
+        int maxSalary = Arrays.stream(response.getData())
+                .mapToInt(Employee::getEmployee_salary)
+                .max()
+                .orElse(0);
+        return ResponseEntity.ok(maxSalary);
     }
 
     @Override

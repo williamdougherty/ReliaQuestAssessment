@@ -13,6 +13,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ApiApplicationTest {
+    /**
+     * Verifies that the /employees/highestSalary endpoint returns the correct highest salary among all employees.
+     * Checks HTTP status and that the value matches the max salary from the employee list.
+     */
+    @Test
+    void shouldReturnHighestSalaryOfEmployees() {
+        // Fetch all employees to determine the expected highest salary
+        ResponseEntity<Employee[]> allResponse = restTemplate.getForEntity("/employees", Employee[].class);
+        assertThat(allResponse.getStatusCode().is2xxSuccessful())
+            .as("Expected a successful HTTP response for all employees")
+            .isTrue();
+
+        Employee[] allEmployees = allResponse.getBody();
+        assertThat(allEmployees)
+            .as("All employees response body should not be null")
+            .isNotNull();
+        assertThat(allEmployees.length)
+            .as("All employees list should not be empty")
+            .isGreaterThan(0);
+
+        int expectedMaxSalary = java.util.Arrays.stream(allEmployees)
+            .mapToInt(Employee::getEmployee_salary)
+            .max()
+            .orElse(0);
+
+        // Call the endpoint under test
+        ResponseEntity<Integer> response = restTemplate.getForEntity("/employees/highestSalary", Integer.class);
+        assertThat(response.getStatusCode().is2xxSuccessful())
+            .as("Expected a successful HTTP response for highest salary")
+            .isTrue();
+
+        Integer actualMaxSalary = response.getBody();
+        assertThat(actualMaxSalary)
+            .as("Highest salary should match the expected value")
+            .isEqualTo(expectedMaxSalary);
+    }
 
     @Autowired
     private TestRestTemplate restTemplate;

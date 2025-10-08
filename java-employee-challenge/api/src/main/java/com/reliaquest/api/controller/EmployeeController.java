@@ -6,9 +6,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
+import java.util.concurrent.TimeUnit;
 
 /**
  * EmployeeController exposes endpoints for employee operations under /employees.
@@ -18,6 +23,9 @@ import java.util.Map;
 @RequestMapping("/employees")
 public class EmployeeController implements IEmployeeController<Employee, Object> {
 
+    private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
+    private static final int MAX_RETRIES = 3;
+    private static final long INITIAL_BACKOFF_MS = 300L;
     // URL for the mock employee API
     private static final String MOCK_API_URL = "http://localhost:8112/api/v1/employee";
 
@@ -25,11 +33,45 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
     private RestTemplate restApiTemplate;
 
     /**
+     * Helper method to handle rate limiting (HTTP 429) with retries and backoff.
+     */
+    private <T> T callWithRetry(Supplier<T> supplier, String operationDescription) {
+        int attempt = 0;
+        long backoff = INITIAL_BACKOFF_MS;
+        while (true) {
+            try {
+                return supplier.get();
+            } catch (HttpStatusCodeException ex) {
+                if (ex.getRawStatusCode() == 429) {
+                    attempt++;
+                    if (attempt > MAX_RETRIES) {
+                        logger.error("Rate limit hit for {} after {} retries. Giving up.", operationDescription, MAX_RETRIES);
+                        throw ex;
+                    }
+                    logger.warn("Rate limit (HTTP 429) encountered during '{}', retrying in {} ms (attempt {}/{})", operationDescription, backoff, attempt, MAX_RETRIES);
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted during backoff", ie);
+                    }
+                    backoff *= 2; // Exponential backoff
+                } else {
+                    throw ex;
+                }
+            }
+        }
+    }
+
+    /**
      * Returns all employees by fetching from the mock API.
      */
     @Override
     public ResponseEntity<List<Employee>> getAllEmployees() {
-        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        EmployeeListResponse response = callWithRetry(
+            () -> restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class),
+            "getAllEmployees"
+        );
         List<Employee> employees = (response != null && response.getData() != null)
                 ? Arrays.asList(response.getData())
                 : List.of();
@@ -41,7 +83,10 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
      */
     @Override
     public ResponseEntity<List<Employee>> getEmployeesByNameSearch(String searchString) {
-        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        EmployeeListResponse response = callWithRetry(
+            () -> restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class),
+            "getEmployeesByNameSearch"
+        );
         if (response == null || response.getData() == null) {
             return ResponseEntity.ok(List.of());
         }
@@ -54,12 +99,16 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
 
     @Override
     public ResponseEntity<Employee> getEmployeeById(String id) {
+        // Not implemented, but if implemented, should use callWithRetry for the GET by ID
         return ResponseEntity.notFound().build();
     }
 
     @Override
     public ResponseEntity<Integer> getHighestSalaryOfEmployees() {
-        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        EmployeeListResponse response = callWithRetry(
+            () -> restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class),
+            "getHighestSalaryOfEmployees"
+        );
         if (response == null || response.getData() == null || response.getData().length == 0) {
             return ResponseEntity.ok(0);
         }
@@ -72,7 +121,10 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
 
     @Override
     public ResponseEntity<List<String>> getTopTenHighestEarningEmployeeNames() {
-        EmployeeListResponse response = restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class);
+        EmployeeListResponse response = callWithRetry(
+            () -> restApiTemplate.getForObject(MOCK_API_URL, EmployeeListResponse.class),
+            "getTopTenHighestEarningEmployeeNames"
+        );
         if (response == null || response.getData() == null || response.getData().length == 0) {
             return ResponseEntity.ok(List.of());
         }
@@ -86,11 +138,13 @@ public class EmployeeController implements IEmployeeController<Employee, Object>
 
     @Override
     public ResponseEntity<Employee> createEmployee(Object employeeInput) {
+        // Not implemented, but if implemented, should use callWithRetry for the POST
         return ResponseEntity.badRequest().build();
     }
 
     @Override
     public ResponseEntity<String> deleteEmployeeById(String id) {
+        // Not implemented, but if implemented, should use callWithRetry for the DELETE
         return ResponseEntity.notFound().build();
     }
 
